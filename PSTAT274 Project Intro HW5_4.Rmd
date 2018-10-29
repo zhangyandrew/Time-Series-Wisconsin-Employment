@@ -1,0 +1,62 @@
+---
+title: "PSTAT274 Project Description"
+author: "Andrew Zhang"
+date: "February 13, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+#This particular dataset describes employment in Wisconsin from 1961 to 1975.
+
+#This dataset in interesting as not only can we forecast future employment in Wisconsin, but we can also determine what might be causing the seasonal dips and rises in the data. On top of all of this, we can compare this to other states to view the trend in employment over the last 30 years.
+
+#Reading in dataset and plotting it
+setwd("C:\\Users\\impor\\Desktop\\ANDREW\\COLLEGE\\STATISTICS\\PSTAT274")
+employment = read.table("C:\\Users\\impor\\Desktop\\ANDREW\\COLLEGE\\STATISTICS\\PSTAT274\\Project\\wisconsin-employment-time-series.txt")
+employment$V1 <- NULL
+data_employ <- ts(employment)
+ts.plot(employment, xlab="Year-Month", ylab="Employment")
+#The plot reveals that there is a strong upward trend that can potentially be linear. It also maintains a strong seasonality from year to year, potentially attributed to a state exclusive event.
+
+#Box Cox Transformation
+require(MASS)
+bcTransform <- boxcox(data_employ ~ as.numeric(1:178))
+lambda = bcTransform$x[which(bcTransform$y == max(bcTransform$y))]
+lambda
+
+y.tr <- (1/lambda)*(data_employ^lambda -1)
+
+y.log <- log(data_employ)
+y.sqrt <- sqrt(data_employ)
+
+op <- par(mfrow = c(1,3))
+ts.plot(y.tr, main="Box-Cox")
+ts.plot(y.log, main = "Log")
+ts.plot(y.sqrt, main="Square-Root")
+
+#Differencing to find the best ACF/PACF Models
+y.tr.diff1 <- diff(y.tr,1)
+ts.plot(y.tr.diff1, main="Differenced Data at Lag 1", ylab=expression(paste(nabla,y)))
+
+op <- par(mfrow=c(1,2))
+acf(y.tr.diff1, main="ACF for Difference Data 1")
+pacf(y.tr.diff1, main="PACF for Difference Data 1")
+var(y.tr.diff1)
+
+y.tr.diff12 <- diff(y.tr.diff1, 12)
+ts.plot(y.tr.diff12, main="Differenced Data at Lag 1, 12", ylab=expression(paste(nabla,y)))
+
+op <- par(mfrow=c(1,2))
+acf(y.tr.diff12, main="ACF for Difference Data 1,12")
+pacf(y.tr.diff12, main="PACF for Difference Data 1,12")
+var(y.tr.diff12)
+
+#After differencing the raw data, the ACF seems to resemble a MA(12) or MA(23) series. The PACF seems to resemble an AR(12) as after lag(12), the PACF takes on 0. There is a positive spike at lag 0,1 in the ACF, while the PACF has a positive spike at 0 and a negative spike at 1. Also both series show a sinusoidal wave pattern, furthering representing a MA(1) model.
+
+```
+
