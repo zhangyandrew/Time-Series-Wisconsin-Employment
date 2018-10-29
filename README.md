@@ -14,5 +14,3 @@ The main techniques applied in this project were:
 - **Spectral Analysis**
 
 The project is also detailed in the same order as listed above.
-
-# Conclusions
