@@ -1,0 +1,176 @@
+---
+title: "PSTAT274 Project Description"
+author: "Andrew Zhang"
+date: "February 13, 2017"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+
+```{r cars}
+#This particular dataset describes employment in Wisconsin from 1961 to 1975.
+
+#This dataset in interesting as not only can we forecast future employment in Wisconsin, but we can also determine what might be causing the seasonal dips and rises in the data. On top of all of this, we can compare this to other states to view the trend in employment over the last 30 years.
+
+#Reading in dataset and plotting it
+employment = read.table("C:\\Users\\impor\\Desktop\\ANDREW\\COLLEGE\\STATISTICS\\PSTAT274\\Project\\wisconsin-employment-time-series.txt")
+employment$V1 <- NULL
+employ2 <- employment$V2
+data_employ <- ts(employ2, freq = 14)
+ts.plot(employment, xlab="Year-Month", ylab="Employment", main = "Wisconsin Employment Time Series, Jan. 1961 - Oct. 1975")
+#The plot reveals that there is a strong upward trend that can potentially be linear. It also maintains a strong seasonality from year to year, potentially attributed to a state exclusive event.
+
+plot(stl(data_employ, s.window = "periodic"), main = "Seasonality and Trend")
+
+
+#Original Histogram
+hist(data_employ)
+curve(dnorm(x, mean = mean(data_employ), sd = sqrt(var(data_employ))), add = TRUE)
+```
+
+```{r, transformation}
+#Box Cox Transformation
+require(MASS)
+bcTransform <- boxcox(data_employ ~ as.numeric(1:178))
+lambda = bcTransform$x[which(bcTransform$y == max(bcTransform$y))]
+
+y.tr <- (1/lambda)*(data_employ^lambda -1)
+
+y.log <- log(data_employ)
+y.sqrt <- sqrt(data_employ)
+
+op <- par(mfrow = c(1,3), mar = c(4,4.5,3,1))
+ts.plot(y.tr, main="Box-Cox")
+ts.plot(y.log, main = "Log")
+ts.plot(y.sqrt, main="Square-Root")
+
+#Differencing to find the best ACF/PACF Models
+y.tr.diff1 <- diff(y.tr,1)
+ts.plot(y.tr.diff1, main="Differenced Data at Lag 1", ylab=expression(paste(nabla,y)))
+abline(h = mean(y.tr.diff1, col = "red"))
+
+op <- par(mfrow=c(1,2), mar = c(4,4.5,3,1))
+acf(y.tr.diff1, main="ACF for Difference Data 1")
+pacf(y.tr.diff1, main="PACF for Difference Data 1")
+var(y.tr.diff1)
+
+y.tr.diff12 <- diff(y.tr.diff1, 12)
+diff12 <- ts.plot(y.tr.diff12, main="Differenced Data at Lag 1, 12", ylab=expression(paste(nabla,y)))
+abline(h = mean(y.tr.diff12, col = "red"))
+
+op <- par(mfrow=c(1,2), mar = c(4,4.5,3,3))
+acf(y.tr.diff12, main="ACF for Difference Data 1,12")
+pacf(y.tr.diff12, main="PACF for Difference Data 1,12")
+var(y.tr.diff12)
+
+y.tr.diff122 <- diff(y.tr.diff12, 12)
+diff122 <- ts.plot(y.tr.diff122, main="Differenced Data at Lag 1, 12, 12", ylab=expression(paste(nabla,y)))
+abline(h = mean(y.tr.diff122, col = "red"))
+
+op <- par(mfrow=c(1,2), mar = c(4,4.5,3,3))
+acf(y.tr.diff122, main="ACF for Difference Data 1,12,12")
+pacf(y.tr.diff122, main="PACF for Difference Data 1,12,12")
+var(y.tr.diff122)
+
+#After differencing the raw data, the ACF seems to resemble a MA(12) or MA(23) series. The PACF seems to resemble an AR(12) as after lag(12), the PACF takes on 0. There is a positive spike at lag 0,1 in the ACF, while the PACF has a positive spike at 0 and a negative spike at 1. Also both series show a sinusoidal wave pattern, furthering representing a MA(1) model.
+
+```
+
+```{r Model Selection}
+#install.packages('qpcR')
+library(qpcR)
+aiccs <- matrix(NA, nr = 8, nc = 8)
+dimnames(aiccs) = list(p=0:7, q=0:7)
+for (p in 0:7){
+  for (q in 0:7){
+    aiccs[p+1, q+1] = AICc(arima(y.tr.diff12, order = c(p,0,q), method = "ML"))
+  }
+}
+
+aiccs
+#Select ARMA(4,4), ARMA(3,3), ARMA(1,0), ARMA(0,1)
+
+#Selecting appropriate model
+library(forecast)
+
+tsdiag(arima(y.tr.diff12, order = c(4,0,4)))
+tsdiag(arima(y.tr.diff12, order = c(3,0,3)))
+tsdiag(arima(y.tr.diff12, order = c(1,0,0)))
+tsdiag(arima(y.tr.diff12, order = c(0,0,1)))
+
+```
+
+```{r model diagnostics}
+fit1 = arima(y.tr.diff12, order = c(4,0,4), method = "ML", xreg=1:length(y.tr.diff12))
+fit2 = arima(y.tr.diff12, order = c(3,0,3), method = "ML", xreg=1:length(y.tr.diff12))
+fit3 = arima(y.tr.diff12, order = c(1,0,0), method = "ML", xreg=1:length(y.tr.diff12))
+fit4 = arima(y.tr.diff12, order = c(0,0,1), method = "ML", xreg=1:length(y.tr.diff12))
+
+#Normality
+shapiro.test(residuals(fit1))
+shapiro.test(residuals(fit2))
+shapiro.test(residuals(fit3))
+shapiro.test(residuals(fit4))
+#All pass shapiro wilkes test
+
+#Independence
+Box.test(residuals(fit1), type = "Ljung")
+Box.test(residuals(fit1), type = "Box-Pierce")
+Box.test((residuals(fit1))^2, lag=13, type="Ljung")
+#All tests have p-values greater than 0.05
+
+Box.test(residuals(fit2), type = "Ljung")
+Box.test(residuals(fit2), type = "Box-Pierce")
+Box.test((residuals(fit2))^2, lag=13, type="Ljung")
+#All tests have p-values greater than 0.05
+
+Box.test(residuals(fit3), type = "Ljung")
+Box.test(residuals(fit3), type = "Box-Pierce")
+Box.test((residuals(fit3))^2, lag=13, type="Ljung")
+#All tests have p-values greater than 0.05
+
+Box.test(residuals(fit4), type = "Ljung")
+Box.test(residuals(fit4), type = "Box-Pierce")
+Box.test((residuals(fit4))^2, lag=13, type="Ljung")
+#All tests have p-values greater than 0.05
+#Since all fitted models pass, select the one with the smallest number of coefficients(fit4)
+
+ts.plot(residuals(fit4), main="Plot of Residual of Fit4")
+
+par(mfrow=c(1,4), mar = c(4,4.5,3,1), oma=c(0,0,2,0))
+op <- par(mfrow=c(2,2))
+acf(residuals(fit4), main="Autocorrelation")
+pacf(residuals(fit4), main="Partial Autocorrelation")
+hist(residuals(fit4), main="Histogram")
+qqnorm(residuals(fit4))
+qqline(residuals(fit4), col="blue")
+title("Fitted Residuals Diagnostics", outer=TRUE)
+par(op)
+
+```
+
+```{r forecasting}
+fit.new <- arima(y.tr, order = c(0, 0, 1), seasonal = list(order = c(0, 2, 0), period = 12),  method = "ML")
+pred <- predict(fit.new, n.ahead = 10)
+pred.orig <- (pred$pred*lambda + 1)^(1/lambda)
+pred.se <- ((lambda*pred$pred + 1)^((1-lambda)/lambda))*(pred$se)
+
+op = par(mfrow = c(1,1))
+plot(data_employ, xlim=c(1,23),ylim=c(0,450), xaxt='n', ylab = expression(X[t]), xlab = 'Years', main='Forecast')
+axis(1, at=seq(from=1, to=180, by=1))
+points(14:23, pred.orig, col="red")
+lines(14:23, pred.orig+1.96*pred.se, lty=2, col="blue")
+lines(14:23, pred.orig-1.96*pred.se, lty=2, col="blue")
+
+#95% CI
+ar1.se <- sqrt(fit4$var.coef[1])
+c(fit4$coef[1] - 1.96*ar1.se, fit4$coef[1] + 1.96*ar1.se)
+```
+ 
+```{r Spectral Analysis}
+employ.per <- spec.pgram(data_employ,log = "no")
+#Consider lag 1, 2, 3
+
+```
+
